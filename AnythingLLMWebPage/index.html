@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AnythingLLM 文档上传</title>
+  <style>
+    :root {
+      --bg: #f3f1ea;
+      --ink: #1d1c19;
+      --accent: #0f5c4c;
+      --line: #d7d2c6;
+      --card: #fffdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, #e7efe9, transparent 40%),
+        linear-gradient(180deg, #f7f4ec, #efe8da);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    main {
+      width: min(560px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 18px 40px rgba(40, 30, 10, 0.08);
+    }
+    h1 { margin: 0 0 8px; font-size: 1.45rem; }
+    p { margin: 0 0 18px; color: #5c584f; line-height: 1.5; }
+    label { display: block; font-size: 0.9rem; margin: 14px 0 6px; }
+    input[type="text"], input[type="password"], input[type="file"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      font: inherit;
+    }
+    button {
+      margin-top: 18px;
+      width: 100%;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: var(--accent);
+      color: white;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    #result {
+      margin-top: 16px;
+      white-space: pre-wrap;
+      background: #f6f3eb;
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 72px;
+      font-size: 0.9rem;
+    }
+    .hint { font-size: 0.85rem; color: #706b60; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>AnythingLLM 文档上传</h1>
+    <p>上传到本地 AnythingLLM，并触发文档处理/向量化（`POST /v1/document/upload`）。</p>
+
+    <label for="baseUrl">AnythingLLM 地址</label>
+    <input id="baseUrl" type="text" value="http://127.0.0.1:3001" />
+
+    <label for="apiKey">API Key</label>
+    <input id="apiKey" type="password" placeholder="在 AnythingLLM 设置里创建" />
+
+    <label for="file">选择文件</label>
+    <input id="file" type="file" />
+
+    <p class="hint">上传后 AnythingLLM 会处理文档；如需挂到工作区，请在应用内把文档加入第一个 Workspace。</p>
+
+    <button id="uploadBtn" type="button">上传并处理</button>
+    <div id="result">等待上传…</div>
+  </main>
+
+  <script>
+    const resultEl = document.getElementById("result");
+    const btn = document.getElementById("uploadBtn");
+
+    btn.addEventListener("click", async () => {
+      const baseUrl = document.getElementById("baseUrl").value.replace(/\/$/, "");
+      const apiKey = document.getElementById("apiKey").value.trim();
+      const fileInput = document.getElementById("file");
+      const file = fileInput.files && fileInput.files[0];
+
+      if (!apiKey) {
+        resultEl.textContent = "请先填写 API Key";
+        return;
+      }
+      if (!file) {
+        resultEl.textContent = "请先选择文件";
+        return;
+      }
+
+      btn.disabled = true;
+      resultEl.textContent = "上传中…";
+
+      try {
+        const form = new FormData();
+        form.append("file", file);
+
+        const resp = await fetch(`${baseUrl}/api/v1/document/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: form,
+        });
+
+        const text = await resp.text();
+        let body;
+        try { body = JSON.parse(text); } catch { body = text; }
+
+        if (!resp.ok) {
+          resultEl.textContent = `失败 (${resp.status})\n` + (typeof body === "string" ? body : JSON.stringify(body, null, 2));
+          return;
+        }
+
+        resultEl.textContent =
+          "上传成功，AnythingLLM 已接收并开始处理/向量化。\n\n" +
+          JSON.stringify(body, null, 2);
+      } catch (err) {
+        resultEl.textContent = "请求失败：" + (err && err.message ? err.message : String(err));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

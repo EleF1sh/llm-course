@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anythingllm-mcp"
+version = "0.1.0"
+description = "MCP adapter for local AnythingLLM (list first workspace files)"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp==2.0.0",
+  "httpx>=0.27",
+  "pydantic>=2.7",
+  "uvicorn>=0.30",
+  "starlette>=0.38",
+  "python-dotenv>=1.0",
+]
+
+[project.scripts]
+anythingllm-mcp = "anythingllm_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

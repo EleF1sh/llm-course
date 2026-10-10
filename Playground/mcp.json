@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "pet-hospital": {
+      "url": "http://127.0.0.1:8100/mcp",
+      "transport": "streamable-http",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      },
+      "description": "Pet Hospital MCP - list_pets (dual protocol via MCPServer Streamable HTTP)"
+    },
+    "anythingllm": {
+      "url": "http://127.0.0.1:8200/mcp",
+      "transport": "streamable-http",
+      "headers": {
+        "Accept": "application/json, text/event-stream"
+      },
+      "description": "AnythingLLM MCP - list_first_workspace_files"
+    }
+  }
+}

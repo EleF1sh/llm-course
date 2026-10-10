@@ -1,0 +1,28 @@
+# secrets / local env
+**/config.ini
+**/.env
+**/.env.local
+
+# python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/dist/
+**/build/
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# local helper scripts
+_progress_loop.ps1
+
+pet-hospital/
+_progress_loop.ps1
+AnythingLLMWebPage/sample-note.txt
+

@@ -1,0 +1,7 @@
+[llm]
+# OpenAI-compatible endpoint (OpenCode / OmniRoute / 任意兼容接口)
+base_url = https://api.openai.com/v1
+api_key = replace-me
+model = gpt-4o-mini
+temperature = 0.7
+timeout = 60
