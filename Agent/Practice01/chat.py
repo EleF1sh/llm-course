@@ -86,15 +86,34 @@ def chat_stream(cfg: dict, messages: list[dict]) -> str:
                 )
                 if delta:
                     chunks.append(delta)
-                    print(delta, end="", flush=True)
-    print()
+                    _safe_print(delta, end="", flush=True)
+    _safe_print()
     return "".join(chunks)
 
 
+def _safe_print(text: str = "", end: str = "\n", flush: bool = False) -> None:
+    """Print text even when the Windows console encoding rejects some characters."""
+    try:
+        print(text, end=end, flush=flush)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        data = (text + end).encode(enc, errors="replace")
+        sys.stdout.buffer.write(data)
+        if flush:
+            sys.stdout.flush()
+
+
 def main() -> None:
+    # Prefer UTF-8 on Windows terminals so Chinese / emoji can print.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     cfg = load_config()
     if not cfg["api_key"] or cfg["api_key"] == "replace-me":
-        print("请先在 config.ini 填写有效的 api_key / base_url / model。")
+        _safe_print("请先在 config.ini 填写有效的 api_key / base_url / model。")
         sys.exit(1)
 
     # Use stream mode by default; set PRACTICE_STREAM=0 for non-stream.
@@ -108,27 +127,27 @@ def main() -> None:
         }
     ]
 
-    print("Practice01 多轮对话已启动。输入内容回车发送；Ctrl+C 退出。")
-    print(f"模式: {'stream' if use_stream else 'non-stream'} | model={cfg['model']}")
+    _safe_print("Practice01 多轮对话已启动。输入内容回车发送；Ctrl+C 退出。")
+    _safe_print(f"模式: {'stream' if use_stream else 'non-stream'} | model={cfg['model']}")
 
     while True:
         try:
             user = input("\n你: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n再见。")
+            _safe_print("\n再见。")
             break
         if not user:
             continue
         history.append({"role": "user", "content": user})
-        print("助手: ", end="", flush=True)
+        _safe_print("助手: ", end="", flush=True)
         try:
             if use_stream:
                 answer = chat_stream(cfg, history)
             else:
                 answer = chat_once(cfg, history)
-                print(answer)
+                _safe_print(answer)
         except Exception as exc:
-            print(f"\n[错误] {exc}")
+            _safe_print(f"\n[错误] {exc}")
             history.pop()  # drop failed user turn
             continue
         history.append({"role": "assistant", "content": answer})
