@@ -73,8 +73,19 @@ class AnythingLLMClient:
             raise AnythingLLMError("BACKEND_INVALID_RESPONSE", "Unexpected workspaces payload")
         return workspaces
 
-    async def list_workspace_documents(self, slug: str) -> Any:
-        return await self._get(f"/v1/workspace/{slug}/documents")
+    async def get_workspace(self, slug: str) -> dict[str, Any]:
+        data = await self._get(f"/v1/workspace/{slug}")
+        if isinstance(data, dict):
+            ws = data.get("workspace")
+            if isinstance(ws, list) and ws:
+                return ws[0]
+            if isinstance(ws, dict):
+                return ws
+        raise AnythingLLMError("BACKEND_INVALID_RESPONSE", "Unexpected workspace payload")
+
+    async def list_local_documents(self) -> Any:
+        """GET /v1/documents — hierarchical local document store."""
+        return await self._get("/v1/documents")
 
     async def first_workspace_files(self) -> dict[str, Any]:
         workspaces = await self.list_workspaces()
@@ -88,16 +99,26 @@ class AnythingLLMClient:
         slug = ws.get("slug") or ws.get("id") or ws.get("name")
         if not slug:
             raise AnythingLLMError("BACKEND_INVALID_RESPONSE", "First workspace missing slug")
-        docs = await self.list_workspace_documents(str(slug))
-        files = _normalize_documents(docs)
+
+        detail = await self.get_workspace(str(slug))
+        workspace_files = _normalize_documents(detail.get("documents") or [])
+        local_tree = await self.list_local_documents()
+        local_files = _normalize_documents(local_tree)
+
         return {
             "workspace": {
-                "name": ws.get("name"),
+                "name": detail.get("name") or ws.get("name"),
                 "slug": slug,
-                "id": ws.get("id"),
+                "id": detail.get("id") or ws.get("id"),
             },
-            "files": files,
-            "count": len(files),
+            "files": workspace_files,
+            "count": len(workspace_files),
+            "local_documents": local_files,
+            "local_count": len(local_files),
+            "note": (
+                "files = documents already linked to the first workspace; "
+                "local_documents = uploaded files in AnythingLLM storage"
+            ),
         }
 
 
