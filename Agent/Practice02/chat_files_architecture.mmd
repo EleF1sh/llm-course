@@ -1,0 +1,77 @@
+%% Practice02 chat_files.py 代码架构图
+%% 源文件: Agent/Practice02/chat_files.py
+
+flowchart TB
+  subgraph Entry["入口"]
+    MAIN["main()"]
+  end
+
+  subgraph Config["配置"]
+    CFG_FILE["config.ini"]
+    LOAD["load_config()"]
+  end
+
+  subgraph Loop["多轮对话循环"]
+    INPUT["input 用户输入"]
+    HISTORY["history messages"]
+    AGENT["chat_with_tools()"]
+    ONCE["chat_once()"]
+    PAYLOAD["build_payload()\n+ TOOLS + tool_choice=auto"]
+    LLM["外部 LLM API\nPOST /chat/completions"]
+  end
+
+  subgraph Dispatch["工具分发"]
+    RUN["run_tool(name, args)"]
+    PARSE["_parse_tool_args()"]
+  end
+
+  subgraph ToolsA["基础工具"]
+    T_DATE["getDate()\n本地 date 命令"]
+    T_LEAP["isLeapYear()\nPython 闰年计算"]
+  end
+
+  subgraph ToolsB["文件工具 · 纯 Python"]
+    T_CWD["getCwd"]
+    T_LIST["listDir"]
+    T_TYPE["getFileType"]
+    T_READ["readFile"]
+    T_CREATE["createFile"]
+    T_EDIT["editFile"]
+    T_MKDIR["makeDir"]
+    T_RMDIR["removeDir"]
+    T_RMFILE["removeFile"]
+    T_REN["renamePath"]
+  end
+
+  subgraph Safety["安全层"]
+    ROOT["WORKSPACE_ROOT\nD:\\LLM-Course"]
+    RESOLVE["_resolve_in_workspace\n/_path_or_err"]
+    BINARY["_looks_binary"]
+  end
+
+  subgraph FS["本地文件系统"]
+    DISK["仅限 WORKSPACE_ROOT 内"]
+  end
+
+  MAIN --> LOAD
+  CFG_FILE --> LOAD
+  LOAD --> INPUT
+  INPUT --> HISTORY
+  HISTORY --> AGENT
+  AGENT --> ONCE
+  ONCE --> PAYLOAD
+  PAYLOAD --> LLM
+  LLM -->|"assistant / tool_calls"| AGENT
+  AGENT -->|"有 tool_calls"| RUN
+  RUN --> PARSE
+  PARSE --> T_DATE
+  PARSE --> T_LEAP
+  PARSE --> T_CWD & T_LIST & T_TYPE & T_READ
+  PARSE --> T_CREATE & T_EDIT & T_MKDIR & T_RMDIR & T_RMFILE & T_REN
+  T_CWD & T_LIST & T_TYPE & T_READ & T_CREATE & T_EDIT & T_MKDIR & T_RMDIR & T_RMFILE & T_REN --> RESOLVE
+  RESOLVE --> ROOT
+  T_READ & T_EDIT --> BINARY
+  RESOLVE --> DISK
+  T_DATE -->|"subprocess date"| OSCMD["操作系统 date/time"]
+  RUN -->|"role=tool 结果"| HISTORY
+  AGENT -->|"最终文本"| OUT["打印助手回答"]

@@ -1,0 +1,7 @@
+[llm]
+# OpenAI-compatible endpoint（需支持 tools / function calling）
+base_url = https://api.deepseek.com/v1
+api_key = replace-me
+model = deepseek-chat
+temperature = 0.7
+timeout = 60
