@@ -9,7 +9,9 @@ D:\LLM-Course
 ├── AnythingLLMMCP         # 任务2：AnythingLLM MCP
 ├── AnythingLLMWebPage     # 任务3：上传网页
 ├── Playground             # MCP 配置 mcp.json
-└── Agent\Practice01       # 第4周对话练习
+└── Agent
+    ├── Practice01         # 第4周：多轮对话
+    └── Practice02         # 工具调用：getDate / isLeapYear / 文件操作
 ```
 
 ## 快速启动
@@ -39,5 +41,8 @@ python -m anythingllm_mcp
 ### 4) 上传页
 浏览器打开 `AnythingLLMWebPage\index.html`
 
-### 5) Practice01
-见 `Agent\Practice01\README.md`
+### 5) Agent
+- Practice01：`Agent\Practice01\README.md` → `python chat.py`
+- Practice02：`Agent\Practice02\README.md`
+  - 基础工具：`python chat.py`
+  - 文件工具版：`python chat_files.py`
