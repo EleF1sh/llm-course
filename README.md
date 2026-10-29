@@ -11,7 +11,8 @@ D:\LLM-Course
 ├── Playground             # MCP 配置 mcp.json
 └── Agent
     ├── Practice01         # 第4周：多轮对话
-    └── Practice02         # 工具调用：getDate / isLeapYear / 文件操作
+    ├── Practice02         # 工具调用：getDate / isLeapYear / 文件操作
+    └── xAgent             # core（业务）+ tui（Textual 界面）
 ```
 
 ## 快速启动
@@ -46,3 +47,4 @@ python -m anythingllm_mcp
 - Practice02：`Agent\Practice02\README.md`
   - 基础工具：`python chat.py`
   - 文件工具版：`python chat_files.py`
+- xAgent：`Agent\xAgent\README.md` → `python run.py`（Textual TUI）

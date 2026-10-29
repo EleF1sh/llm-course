@@ -1,0 +1,11 @@
+[llm]
+# OpenAI-compatible endpoint（需支持 tools / function calling）
+base_url = https://api.deepseek.com/v1
+api_key = replace-me
+model = deepseek-chat
+temperature = 0.7
+timeout = 60
+
+[search]
+# 百度千帆 AI 搜索 API Key（searchWeb 工具鉴权，勿提交真实密钥）
+baidu_qianfan_api_key = replace-me
