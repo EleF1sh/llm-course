@@ -7,6 +7,14 @@ Agent/xAgent/**/*文本文档*.txt
 **/.env
 **/.env.local
 
+# local agent runtime data
+**/.agents/sessions/
+**/.agents/context/
+**/.agents/skills/.skills_store_lock.json
+
+# duplicate local copies / large binaries outside skills
+Agent/新建文件夹/
+
 # python
 **/__pycache__/
 **/*.py[cod]

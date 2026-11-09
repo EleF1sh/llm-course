@@ -5,12 +5,43 @@ import mimetypes
 import platform
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
+import core.config as _cfg
 from core.config import WORKSPACE_ROOT, load_baidu_qianfan_api_key
+from core.skills import create_skill, discover_skills, load_skill
 
-TEXT_READ_LIMIT = 200_000
+def _text_read_limit() -> int:
+    return int(
+        _cfg.get_runtime_config().get("text_read_limit")
+        or getattr(_cfg, "TEXT_READ_LIMIT", 200_000)
+    )
+
+
+def _fetchpage_limit() -> int:
+    return int(
+        _cfg.get_runtime_config().get("fetchpage_markdown_limit")
+        or getattr(_cfg, "FETCHPAGE_MARKDOWN_LIMIT", 80_000)
+    )
+
+
+def _runcli_timeout() -> int:
+    return int(
+        _cfg.get_runtime_config().get("runcli_timeout_sec")
+        or getattr(_cfg, "RUNCLI_TIMEOUT_SEC", 30)
+    )
+
+
+def _runcli_output_limit() -> int:
+    return int(
+        _cfg.get_runtime_config().get("runcli_output_limit")
+        or getattr(_cfg, "RUNCLI_OUTPUT_LIMIT", 12_000)
+    )
+
+
+TEXT_READ_LIMIT = 200_000  # 兼容旧引用；实际读取走 _text_read_limit()
 
 
 def _ok(data: dict[str, Any]) -> str:
@@ -97,7 +128,14 @@ def isLeapYear(year: int) -> str:
 
 
 def getCwd() -> str:
-    return _ok({"cwd": str(Path.cwd().resolve()), "workspace_root": str(WORKSPACE_ROOT)})
+    return _ok(
+        {
+            "cwd": str(Path.cwd().resolve()),
+            "project_root": str(_cfg.PROJECT_ROOT),
+            "skills_dir": str(_cfg.SKILLS_DIR),
+            "workspace_root": str(WORKSPACE_ROOT),
+        }
+    )
 
 
 def listDir(path: str) -> str:
@@ -161,9 +199,10 @@ def readFile(path: str) -> str:
     if _looks_binary(sample):
         return _err("拒绝读取：看起来是二进制文件", path=str(target))
     text = target.read_text(encoding="utf-8", errors="replace")
-    truncated = len(text) > TEXT_READ_LIMIT
+    limit = _text_read_limit()
+    truncated = len(text) > limit
     if truncated:
-        text = text[:TEXT_READ_LIMIT]
+        text = text[:limit]
     return _ok(
         {
             "path": str(target),
@@ -261,7 +300,7 @@ def renamePath(src: str, dst: str) -> str:
     return _ok({"from": str(source), "to": str(dest)})
 
 
-FETCHPAGE_MARKDOWN_LIMIT = 80_000
+FETCHPAGE_MARKDOWN_LIMIT = 80_000  # 兼容；实际用 _fetchpage_limit()
 
 
 def fetchpage(url: str) -> str:
@@ -321,8 +360,9 @@ def fetchpage(url: str) -> str:
 
     text = str(markdown).strip()
     truncated = False
-    if len(text) > FETCHPAGE_MARKDOWN_LIMIT:
-        text = text[:FETCHPAGE_MARKDOWN_LIMIT] + "\n\n...(truncated)"
+    fp_limit = _fetchpage_limit()
+    if len(text) > fp_limit:
+        text = text[:fp_limit] + "\n\n...(truncated)"
         truncated = True
 
     return _ok(
@@ -429,7 +469,9 @@ RUNCLI_TIMEOUT_SEC = 30
 RUNCLI_OUTPUT_LIMIT = 12_000
 
 
-def _truncate_cli_output(text: str, limit: int = RUNCLI_OUTPUT_LIMIT) -> tuple[str, bool]:
+def _truncate_cli_output(text: str, limit: int | None = None) -> tuple[str, bool]:
+    if limit is None:
+        limit = _runcli_output_limit()
     raw = text or ""
     if len(raw) <= limit:
         return raw, False
@@ -463,7 +505,7 @@ def RunCli(command: str, args: list[str] | None = None) -> str:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=RUNCLI_TIMEOUT_SEC,
+            timeout=_runcli_timeout(),
             check=False,
         )
     except FileNotFoundError:
@@ -472,7 +514,7 @@ def RunCli(command: str, args: list[str] | None = None) -> str:
         out, out_cut = _truncate_cli_output((exc.stdout or "") if isinstance(exc.stdout, str) else "")
         err, err_cut = _truncate_cli_output((exc.stderr or "") if isinstance(exc.stderr, str) else "")
         return _err(
-            f"命令超时（>{RUNCLI_TIMEOUT_SEC}s）",
+            f"命令超时（>{_runcli_timeout()}s）",
             command=cmd,
             args=argv[1:],
             stdout=out,
@@ -495,7 +537,7 @@ def RunCli(command: str, args: list[str] | None = None) -> str:
             "exit_code": completed.returncode,
             "stdout_truncated": stdout_cut,
             "stderr_truncated": stderr_cut,
-            "timeout_sec": RUNCLI_TIMEOUT_SEC,
+            "timeout_sec": _runcli_timeout(),
         }
     )
 
@@ -510,6 +552,153 @@ def parse_tool_args(arguments: str | dict | None) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _skillhub_argv(*cli_args: str) -> list[str]:
+    """解析 skillhub 可执行入口（优先直调 Python CLI，兼容 Windows）。"""
+    home = Path.home()
+    py_cli = home / ".skillhub" / "skills_store_cli.py"
+    if py_cli.is_file():
+        return [sys.executable, str(py_cli), *cli_args]
+    which = shutil.which("skillhub") or shutil.which("skillhub.cmd")
+    if which:
+        return [which, *cli_args]
+    cmd = home / ".local" / "bin" / "skillhub.cmd"
+    if cmd.is_file():
+        return [str(cmd), *cli_args]
+    raise FileNotFoundError(
+        "未找到 skillhub CLI。请先按 https://skillhub.cn/install/skillhub.md 安装。"
+    )
+
+
+def _run_skillhub(cli_args: list[str], *, timeout: float = 120.0) -> str:
+    try:
+        argv = _skillhub_argv(*cli_args)
+    except FileNotFoundError as exc:
+        return _err(str(exc))
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return _err("skillhub 执行超时", args=cli_args)
+    except OSError as exc:
+        return _err(f"无法启动 skillhub: {exc}", args=cli_args)
+    out = (completed.stdout or "").strip()
+    err = (completed.stderr or "").strip()
+    return _ok(
+        {
+            "args": cli_args,
+            "stdout": out,
+            "stderr": err,
+            "exit_code": completed.returncode,
+            "skills_dir": str(_cfg.SKILLS_DIR),
+        }
+    )
+
+
+def loadSkill(name: str, filename: str | None = None) -> str:
+    fn = None if filename is None or not str(filename).strip() else str(filename).strip()
+    return _ok(load_skill(str(name or ""), fn))
+
+
+def createSkill(name: str, skill_context: str) -> str:
+    return _ok(create_skill(str(name or ""), str(skill_context or "")))
+
+
+def skillhubSearch(query: str) -> str:
+    q = (query or "").strip()
+    if not q:
+        return _err("缺少参数 query")
+    return _run_skillhub(["search", q])
+
+
+def skillhubInstall(slug: str, namespace: str | None = None) -> str:
+    s = (slug or "").strip()
+    if not s:
+        return _err("缺少参数 slug")
+    _cfg.SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    args = ["install", s, "--dir", str(_cfg.SKILLS_DIR)]
+    ns = (namespace or "").strip()
+    if ns:
+        args.extend(["--namespace", ns])
+    result = _run_skillhub(args, timeout=180.0)
+    # 安装后重扫，使新技能立即出现在注册表
+    discover_skills(force=True)
+    return result
+
+
+def skillhubList() -> str:
+    local = [
+        {"name": s.name, "description": s.description, "dir": str(s.dir)}
+        for s in discover_skills()
+    ]
+    cli = _run_skillhub(["list", "--dir", str(_cfg.SKILLS_DIR)])
+    try:
+        cli_data = json.loads(cli)
+    except json.JSONDecodeError:
+        cli_data = {"ok": False, "raw": cli}
+    return _ok(
+        {
+            "skills_dir": str(_cfg.SKILLS_DIR),
+            "project_root": str(_cfg.PROJECT_ROOT),
+            "skills": local,
+            "skillhub_cli": cli_data,
+        }
+    )
+
+
+def createMCP(
+    config_json: str | dict | None = None,
+    server_name: str | None = None,
+    server_type: str | None = None,
+    url: str | None = None,
+    command: str | None = None,
+    args: list | None = None,
+    merge: bool = True,
+    reload: bool = True,
+) -> str:
+    from core.mcp_client import create_mcp_config
+
+    try:
+        result = create_mcp_config(
+            config_json=config_json,
+            server_name=str(server_name) if server_name else None,
+            server_type=str(server_type) if server_type else None,
+            url=str(url) if url else None,
+            command=str(command) if command else None,
+            args=list(args) if args is not None else None,
+            merge=merge,
+            reload=reload,
+            project_root=_cfg.PROJECT_ROOT,
+        )
+        return _ok(result)
+    except (ValueError, TypeError, OSError, json.JSONDecodeError) as exc:
+        return _err(str(exc))
+
+
+def recallContext(text: str, archive_id: str | None = None) -> str:
+    from core.context_compact import recall_context
+
+    try:
+        result = recall_context(
+            str(text or ""),
+            archive_id=str(archive_id).strip() if archive_id else None,
+            project_root=_cfg.PROJECT_ROOT,
+        )
+        if not result.get("ok"):
+            return _err(str(result.get("error") or "检索失败"), **{
+                k: v for k, v in result.items() if k not in {"ok", "error"}
+            })
+        return _ok(result)
+    except (OSError, ValueError, TypeError) as exc:
+        return _err(str(exc))
 
 
 def run_tool(name: str, arguments: str | dict | None = None) -> str:
@@ -552,6 +741,52 @@ def run_tool(name: str, arguments: str | dict | None = None) -> str:
         if name == "RunCli":
             raw_args = args.get("args", [])
             return RunCli(str(args.get("command", "")), raw_args if isinstance(raw_args, list) else raw_args)
+        if name == "loadSkill":
+            raw_fn = args.get("filename")
+            return loadSkill(
+                str(args.get("name", "")),
+                str(raw_fn) if raw_fn is not None and str(raw_fn).strip() else None,
+            )
+        if name == "createSkill":
+            return createSkill(
+                str(args.get("name", "")),
+                str(args.get("skillContext", "")),
+            )
+        if name == "skillhubSearch":
+            return skillhubSearch(str(args.get("query", "")))
+        if name == "skillhubInstall":
+            ns = args.get("namespace")
+            return skillhubInstall(
+                str(args.get("slug", "")),
+                str(ns) if ns is not None and str(ns).strip() else None,
+            )
+        if name == "skillhubList":
+            return skillhubList()
+        if name == "createMCP":
+            return createMCP(
+                config_json=args.get("configJson"),
+                server_name=args.get("serverName"),
+                server_type=args.get("type"),
+                url=args.get("url"),
+                command=args.get("command"),
+                args=args.get("args") if isinstance(args.get("args"), list) else None,
+                merge=bool(args["merge"]) if "merge" in args else True,
+                reload=bool(args["reload"]) if "reload" in args else True,
+            )
+        if name == "recallContext":
+            rid = args.get("id")
+            return recallContext(
+                str(args.get("text", "")),
+                str(rid) if rid is not None and str(rid).strip() else None,
+            )
+        # MCP 动态工具：按映射转发到对应 Server
+        try:
+            from core.mcp_client import call_mcp_tool, is_mcp_tool
+
+            if is_mcp_tool(name):
+                return call_mcp_tool(name, args)
+        except Exception as exc:
+            return _err(f"MCP tool error: {exc}")
         return _err(f"unknown tool: {name}")
     except PermissionError as exc:
         return _err(str(exc))

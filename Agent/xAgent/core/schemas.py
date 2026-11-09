@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-# OpenAI-compatible function calling 工具定义（来自 Practice02/chat_files.py）
-TOOLS: list[dict[str, Any]] = [
+# OpenAI-compatible function calling 本地工具定义（MCP 工具在运行时合并）
+LOCAL_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -268,8 +268,223 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "loadSkill",
+            "description": (
+                "按需加载项目 `.agents/skills` 中某个 Skill 的完整说明或附件。"
+                "仅传 name 时返回该 Skill 的 SKILL.md 全文；"
+                "同时传 filename 时只读取附件（不重复加载 SKILL.md）。"
+                "需要遵循某技能流程、阅读其脚本/模板/提示词时必须调用。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Skill 名称（YAML frontmatter 的 name，或技能目录名）",
+                    },
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "可选。相对于 Skill 目录、项目根的路径，或绝对路径；"
+                            "也可只给文件名（在 Skill 目录内唯一时自动定位）"
+                        ),
+                    },
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "createSkill",
+            "description": (
+                "根据用户自然语言需求，在当前项目 `.agents/skills/` 下新建一个 Skill。"
+                "传入 name 与要写入 SKILL.md 的完整 skillContext（含 YAML frontmatter）。"
+                "已存在同名技能时拒绝覆盖；额外目录/脚本请再用 makeDir、createFile 等文件工具创建。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": (
+                            "Skill 名称：小写英文字母、数字与连字符，例如 meeting-notes"
+                        ),
+                    },
+                    "skillContext": {
+                        "type": "string",
+                        "description": (
+                            "写入 SKILL.md 的完整内容，须含 YAML frontmatter"
+                            "（name、description）及正文说明"
+                        ),
+                    },
+                },
+                "required": ["name", "skillContext"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skillhubSearch",
+            "description": (
+                "在 SkillHub 商店搜索技能。"
+                "用户要找技能、插件、扩展能力时必须调用；传入关键词 query。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词，例如 calendar、pdf",
+                    }
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skillhubInstall",
+            "description": (
+                "从 SkillHub 安装技能到当前项目根的 .agents/skills。"
+                "用户确认安装某个技能后调用；传入 slug，可选 namespace。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "slug": {
+                        "type": "string",
+                        "description": "技能 slug，例如 calendar",
+                    },
+                    "namespace": {
+                        "type": "string",
+                        "description": "可选命名空间，例如 clawhub_ndcccccc",
+                    },
+                },
+                "required": ["slug"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skillhubList",
+            "description": "列出当前项目 .agents/skills 中已发现的技能（name + description）。",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "createMCP",
+            "description": (
+                "根据用户提供的 MCP Server 配置，写入当前项目根目录的 `.mcp.json`。"
+                "用户给出 ModelScope / 本地 MCP 的 url 或 stdio command 时必须调用。"
+                "默认与已有配置合并并立即重连；可用 merge=false 整文件覆盖。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "configJson": {
+                        "type": "string",
+                        "description": (
+                            "MCP 配置 JSON 字符串。可以是完整 "
+                            '`{"mcpServers":{...}}`、仅 servers 映射，'
+                            "或单个 server 对象（此时必须同时传 serverName）"
+                        ),
+                    },
+                    "serverName": {
+                        "type": "string",
+                        "description": "单个 Server 的名称，例如 Bazi-MCP、PetHospitalMCP",
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "传输类型：streamable_http 或 stdio",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Streamable HTTP 的 MCP 端点 URL",
+                    },
+                    "command": {
+                        "type": "string",
+                        "description": "stdio 启动命令，例如 npx、python",
+                    },
+                    "args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "stdio 命令参数列表",
+                    },
+                    "merge": {
+                        "type": "boolean",
+                        "description": "是否合并进已有 .mcp.json（默认 true）",
+                    },
+                    "reload": {
+                        "type": "boolean",
+                        "description": "写入后是否立即重连 MCP（默认 true）",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recallContext",
+            "description": (
+                "从项目 `.agents/context/` 归档中按关键词检索压缩前的原始上下文。"
+                "当压缩摘要缺少细节、需要核对历史对话/工具结果时必须调用。"
+                "text 为必填关键词；id 可选，指定归档编号（如 20261022-153000）。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "要查找的关键词或文本片段",
+                    },
+                    "id": {
+                        "type": "string",
+                        "description": "可选。归档编号，例如 20261022-153000（可省略 .jsonl）",
+                    },
+                },
+                "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
+
+# 兼容旧导入名：仅本地工具；完整列表请用 get_tools()
+TOOLS: list[dict[str, Any]] = LOCAL_TOOLS
+
+
+def get_tools() -> list[dict[str, Any]]:
+    """本地工具 + 已连接 MCP Server 动态注册的工具。"""
+    try:
+        from core.mcp_client import get_mcp_tools
+
+        mcp_tools = get_mcp_tools()
+    except Exception:
+        mcp_tools = []
+    if not mcp_tools:
+        return list(LOCAL_TOOLS)
+    return list(LOCAL_TOOLS) + list(mcp_tools)
 
 
 def tool_names() -> list[str]:
-    return [t["function"]["name"] for t in TOOLS]
+    return [t["function"]["name"] for t in get_tools()]

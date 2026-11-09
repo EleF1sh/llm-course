@@ -5,6 +5,23 @@ api_key = replace-me
 model = deepseek-chat
 temperature = 0.7
 timeout = 60
+# 可选：模型上下文窗口（token）。不填则按模型名推断，未知则用 agent.default_context_window
+# context_window = 128000
+
+[agent]
+max_tool_rounds = 24
+office_prompt_char_limit = 14000
+chat_history_limit = 400
+text_read_limit = 200000
+fetchpage_markdown_limit = 80000
+runcli_timeout_sec = 30
+runcli_output_limit = 12000
+default_context_window = 128000
+compact_threshold = 0.60
+compact_target_tokens = 5000
+compact_timeout_sec = 180
+recall_max_hits = 12
+recall_max_chars = 6000
 
 [search]
 # 百度千帆 AI 搜索 API Key（searchWeb 工具鉴权，勿提交真实密钥）
